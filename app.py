@@ -3,11 +3,12 @@
 Pastor uploads a color-coded sermon + a title graphic + a blank background.
 Returns a zip with (1) finished flat slide images that work anywhere, and
 (2) an editable ProPresenter .pro with a one-click image installer."""
-import os, re, sys, io, zipfile, subprocess, tempfile
+import os, re, sys, io, gc, zipfile, subprocess, tempfile
 from flask import Flask, request, send_file, render_template_string
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 os.environ.setdefault("DS_FONT_DIR", os.path.join(HERE, "fonts"))
+os.environ.setdefault("DS_SS", "1")  # native-res render to stay within 512MB
 sys.path.insert(0, HERE)
 import design_studio as ds
 import propresenter_generator as sp
@@ -90,6 +91,16 @@ def index(): return render_template_string(PAGE, error=None)
 @app.route("/healthz")
 def healthz(): return "ok"
 
+def _finish_zip(z, pro_ok, outpro, title, rel, bp, tp, installer, readme):
+    if pro_ok:
+        z.write(outpro, f"Editable ProPresenter/{title}.pro")
+        z.write(bp, f"Editable ProPresenter/{rel}/background.png")
+        z.write(tp, f"Editable ProPresenter/{rel}/title.png")
+        zi = zipfile.ZipInfo("Editable ProPresenter/Install images (double-click).command")
+        zi.external_attr = (0o755 << 16); z.writestr(zi, installer)
+    z.writestr("READ ME FIRST.txt", readme)
+
+
 @app.route("/generate", methods=["POST"])
 def generate():
     title = safe(request.form.get("title", "").strip())
@@ -110,12 +121,7 @@ def generate():
             return render_template_string(PAGE, error="Couldn't read the sermon: " + str(e)), 500
         if not entries:
             return render_template_string(PAGE, error="No blue points or red Scripture found - is the sermon color-coded?"), 400
-        # 1) finished flat slides (works anywhere)
-        try:
-            slides = ds.deck_from_uploads(tp, bp, entries, align)
-        except Exception as e:
-            return render_template_string(PAGE, error="Design step failed: " + str(e)), 500
-        # 2) editable .pro (uploaded title + blank; portable media refs)
+        # editable .pro (uploaded title + blank; portable media refs)
         outpro = os.path.join(tmp, f"{title}.pro")
         rel = f"ProPresenter Media/{title}"
         env = dict(os.environ, PP_PORTABLE="1")
@@ -141,17 +147,17 @@ def generate():
             "  2. In ProPresenter, delete any old copy, then import the .pro.\n"
             "  (Editable text, but needs the images installed as above.)\n")
         mem = io.BytesIO()
-        with zipfile.ZipFile(mem, "w", zipfile.ZIP_DEFLATED) as z:
-            for i, (lab, im) in enumerate(slides, 1):
-                b = io.BytesIO(); im.save(b, "PNG"); b.seek(0)
-                z.writestr(f"Slides/{i:02d} {safe(lab)}.png", b.read())
-            if pro_ok:
-                z.write(outpro, f"Editable ProPresenter/{title}.pro")
-                z.write(bp, f"Editable ProPresenter/{rel}/background.png")
-                z.write(tp, f"Editable ProPresenter/{rel}/title.png")
-                zi = zipfile.ZipInfo("Editable ProPresenter/Install images (double-click).command")
-                zi.external_attr = (0o755 << 16); z.writestr(zi, installer)
-            z.writestr("READ ME FIRST.txt", readme)
+        try:
+            with zipfile.ZipFile(mem, "w", zipfile.ZIP_DEFLATED) as z:
+                i = 0
+                for lab, im in ds.deck_from_uploads_iter(tp, bp, entries, align):
+                    i += 1
+                    b = io.BytesIO(); im.save(b, "PNG", optimize=True)
+                    z.writestr(f"Slides/{i:02d} {safe(lab)}.png", b.getvalue())
+                    del im, b; gc.collect()
+                _finish_zip(z, pro_ok, outpro, title, rel, bp, tp, installer, readme)
+        except Exception as e:
+            return render_template_string(PAGE, error="Design step failed: " + str(e)), 500
         mem.seek(0)
         resp = send_file(mem, mimetype="application/zip", as_attachment=True,
                          download_name=f"{title} - Slides.zip")
