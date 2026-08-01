@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TC Church ProPresenter generator (standalone, used by the web app)."""
+"""TC Church - image-aware ProPresenter 7 (.pro) generator (standalone)."""
 import os, sys, re, uuid, glob
 HERE=os.path.dirname(os.path.abspath(__file__))
 for _p in (os.path.join(HERE,"ppgen"),HERE):
@@ -102,13 +102,29 @@ def parse_scripture(text):
 FILL = G.Media.DrawingProperties.SCALE_BEHAVIOR_FILL
 MIDC = G.Media.DrawingProperties.SCALE_ALIGNMENT_MIDDLE_CENTER
 
-BLUE_EXACT = "0070C0"    # main points: ONLY runs colored exactly this blue
-RED_EXACT  = "FF0000"    # scripture:   paragraphs containing this red
+def classify_color(hx):
+    """Tolerant color match, so slightly different shades still count.
+      'red'  -> Scripture (e.g. FF0000, EE0000, C00000)
+      'blue' -> main point (e.g. 0070C0, royal blues)
+    Purple (7030A0) and orange (BF4E14) return None, so references and
+    application text are never mistaken for points or Scripture."""
+    hx = (hx or "").strip().lstrip("#")
+    if len(hx) != 6:
+        return None
+    try:
+        r, g, b = int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16)
+    except ValueError:
+        return None
+    if r >= 150 and g <= 50 and b <= 60:          # strong red (not orange)
+        return "red"
+    if r <= 90 and b >= 110 and b >= g - 20:       # blue (not purple/navy)
+        return "blue"
+    return None
 
 
 def extract_exact(docx_path):
-    """Points come from ONLY the exact-blue (0070C0) runs — not the whole
-    paragraph they sit in. Scripture = paragraphs containing exact red text."""
+    """Points come from BLUE-classified runs only (not the whole paragraph).
+    Scripture = any paragraph containing RED-classified text (whole paragraph)."""
     import zipfile
     from xml.etree import ElementTree as ET
     W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -128,12 +144,13 @@ def extract_exact(docx_path):
                 runs.append((col, txt))
         if not runs:
             continue
-        if any(col == RED_EXACT for col, _ in runs):
+        kinds = {classify_color(c) for c, _ in runs if c}
+        if "red" in kinds:
             full = " ".join("".join(t for _, t in runs).split())
             if full:
                 items.append(("scripture", full))
             continue
-        blue = " ".join("".join(t for col, t in runs if col == BLUE_EXACT).split())
+        blue = " ".join("".join(t for c, t in runs if classify_color(c) == "blue").split())
         if blue:
             items.append(("main", blue))
     return items
