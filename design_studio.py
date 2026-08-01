@@ -683,12 +683,14 @@ def _shadow_text(d, xy, s, f, fill, dark, off=4):
     d.text((xy[0]+off, xy[1]+off), s, font=f, fill=dark)
     d.text(xy, s, font=f, fill=fill)
 
-def point_on_image(blank_im, a, text, accent_word=None):
+def point_on_image(blank_im, a, text, accent_word=None, base=None):
     """A bold main-point slide composed over an uploaded blank background,
-    palette-matched, with a legibility scrim + shadow."""
+    palette-matched, with a legibility scrim + shadow. Pass a pre-scrimmed
+    `base` to skip the (expensive) scrim on every slide."""
     ink = (26, 24, 28) if a["light"] else (245, 242, 235)
     dark = (0, 0, 0, 150)
-    base = soft_scrim(blank_im, darken=not a["light"], strength=0.36)
+    if base is None:
+        base = soft_scrim(blank_im, darken=not a["light"], strength=0.38)
     img = base.resize((W*SS, H*SS), Image.LANCZOS); d = ImageDraw.Draw(img, "RGBA")
     ml = MARGIN; box_w = W - MARGIN*2
     f, lines, size = fit_fill(d, text.upper(), "cond_bold", box_w, H-2*MARGIN-70, 4, 150, 66, 0.98)
@@ -706,10 +708,11 @@ def point_on_image(blank_im, a, text, accent_word=None):
             _shadow_text(d, (ml*SS, y+i*lh), ln, f, ink, dark, off=4*SS)
     return _finish(img)
 
-def scripture_on_image(blank_im, a, verse, ref, align="left"):
+def scripture_on_image(blank_im, a, verse, ref, align="left", base=None):
     ink = (26, 24, 28) if a["light"] else (244, 241, 234)
     dark = (0, 0, 0, 140)
-    base = soft_scrim(blank_im, darken=not a["light"], strength=0.40)
+    if base is None:
+        base = soft_scrim(blank_im, darken=not a["light"], strength=0.40)
     img = base.resize((W*SS, H*SS), Image.LANCZOS); d = ImageDraw.Draw(img, "RGBA")
     box_w = W - MARGIN*2
     f, lines, size = fit_fill(d, verse, "geo_reg", box_w, H-2*MARGIN-140, 6, 60, 34, 1.24)
@@ -742,16 +745,17 @@ def deck_from_uploads_iter(title_path, blank_path, entries, align="left"):
         import colorsys; h, s, v = colorsys.rgb_to_hsv(*[x/255 for x in rgb]); return s*v
     if _sat(at["accent"]) > _sat(a["accent"]) + 0.08:
         a["accent"] = at["accent"]
+    base = soft_scrim(blank_im, darken=not a["light"], strength=0.38)   # compute ONCE
     for e in entries:
         if e[0] == "main":
-            yield ("Point", point_on_image(blank_im, a, e[1]))
+            yield ("Point", point_on_image(blank_im, a, e[1], base=base))
         else:
             _, ref, verse = e
             pieces = _split_passage(verse, 200)
             for j, piece in enumerate(pieces):
                 last = (j == len(pieces) - 1)
                 yield (ref if (last and ref) else "Scripture",
-                       scripture_on_image(blank_im, a, piece, ref if last else "", align))
+                       scripture_on_image(blank_im, a, piece, ref if last else "", align, base=base))
 
 
 def deck_from_uploads(title_path, blank_path, entries, align="left"):
