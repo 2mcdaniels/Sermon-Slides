@@ -152,8 +152,8 @@ def generate():
                 i = 0
                 for lab, im in ds.deck_from_uploads_iter(tp, bp, entries, align):
                     i += 1
-                    b = io.BytesIO(); im.save(b, "PNG", optimize=True)
-                    z.writestr(f"Slides/{i:02d} {safe(lab)}.png", b.getvalue())
+                    b = io.BytesIO(); im.convert("RGB").save(b, "JPEG", quality=88)
+                    z.writestr(f"Slides/{i:02d} {safe(lab)}.jpg", b.getvalue())
                     del im, b; gc.collect()
                 _finish_zip(z, pro_ok, outpro, title, rel, bp, tp, installer, readme)
         except Exception as e:
