@@ -96,7 +96,7 @@ PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
   </label>
   <button type=submit>Build slides</button>
  </form>
- <p class=foot>Points come from blue text, Scripture from red. You&rsquo;ll get a zip with the <code>.pro</code> and a media folder&mdash;drop it in Documents, then import. Needs BebasNeue and Helvetica installed.</p>
+ <p class=foot>Points come from blue text, Scripture from red. You&rsquo;ll get a zip with the <code>.pro</code> and a media folder&mdash;run the included installer, then import. No special fonts needed.</p>
 </div>
 <div class=overlay id=overlay>
  <div class=spin></div>
@@ -181,8 +181,8 @@ def generate():
             "  1. Move the 'ProPresenter Media' folder into your Mac's Documents folder:\n"
             f"       ~/Documents/{rel}/background.png\n       ~/Documents/{rel}/title.png\n"
             f"  2. Delete any old copy in ProPresenter, then import '{title}.pro'.\n\n"
-            "Needs BebasNeue and Helvetica fonts installed. If ProPresenter asks to\n"
-            "locate media, point it at the two images in the ProPresenter Media folder.\n")
+            "No special fonts needed. If ProPresenter asks to locate media, point it\n"
+            "at the two images in the ProPresenter Media folder.\n")
         installer = (
             "#!/bin/bash\n"
             "cd \"$(dirname \"$0\")\"\n"
