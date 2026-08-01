@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: sermon-slides
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --timeout 200
