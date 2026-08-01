@@ -176,12 +176,13 @@ def _p_enum(align):
             "right": P.ALIGNMENT_RIGHT}[align]
 
 
-def make_rtf_align(text, fs_halfpt, font, swiss, rgb, align, tracking=0):
+def make_rtf_align(text, fs_halfpt, font, swiss, rgb, align, tracking=0, bold=False):
     """RTF with selectable horizontal alignment (ql/qc/qr), multi-line aware,
-    and optional character tracking (\\expndtw twips)."""
+    optional character tracking (\\expndtw twips), and optional bold."""
     fdef = "\\fswiss" if swiss else "\\fnil"
     qtag = ALIGN_TAG[align]
     trk = ("\\expnd%d\\expndtw%d " % (tracking // 5, tracking)) if tracking else ""
+    bt = "\\b " if bold else ""
     r, g, b = rgb
     cc = "\\c%d\\c%d\\c%d" % (round(r/255*100000), round(g/255*100000), round(b/255*100000))
     header = ("{\\rtf1\\ansi\\ansicpg1252\\cocoartf2870\n"
@@ -190,12 +191,12 @@ def make_rtf_align(text, fs_halfpt, font, swiss, rgb, align, tracking=0):
               "{\\*\\expandedcolortbl;;\\csgenericrgb%s;}\n"
               "\\deftab1680\n"
               "\\pard\\pardeftab1680%s\\pardirnatural\\partightenfactor0\n\n"
-              "\\f0\\fs%d \\cf2 %s\\CocoaLigature0 "
-              % (fdef, font, r, g, b, cc, qtag, fs_halfpt, trk))
+              "\\f0%s\\fs%d \\cf2 %s\\CocoaLigature0 "
+              % (fdef, font, r, g, b, cc, qtag, bt, fs_halfpt, trk))
     lines = text.split("\n"); parts = [header]
     for i, ln in enumerate(lines):
         if i > 0:
-            parts.append("\\\n\\pard\\pardeftab1680%s\\pardirnatural\\partightenfactor0\n\\cf2 %s" % (qtag, trk))
+            parts.append("\\\n\\pard\\pardeftab1680%s\\pardirnatural\\partightenfactor0\n%s\\cf2 %s" % (qtag, bt, trk))
         parts.append(rtf_escape(ln))
     parts.append("}")
     return "".join(parts).encode("utf-8")
@@ -295,7 +296,7 @@ def bg_media_element(rel_path, natural, name="Background"):
 
 
 def text_element(name, text, bounds, pt, font, swiss, align, info, rgb, shadow,
-                 tracking=0):
+                 tracking=0, bold=False, shrink=False):
     el = slide_pb2.Slide.Element(); el.info = info
     ge = el.element; ge.uuid.CopyFrom(new_uuid()); ge.name = name
     ge.bounds.origin.x = bounds[0]; ge.bounds.origin.y = bounds[1]
@@ -315,11 +316,12 @@ def text_element(name, text, bounds, pt, font, swiss, align, info, rgb, shadow,
         sh.color.red = srgb[0] / 255.0; sh.color.green = srgb[1] / 255.0
         sh.color.blue = srgb[2] / 255.0; sh.color.alpha = 1.0
     t = ge.text
-    t.rtf_data = make_rtf_align(text, pt * 2, font, swiss, rgb, align, tracking)
+    t.rtf_data = make_rtf_align(text, pt * 2, font, swiss, rgb, align, tracking, bold)
     t.vertical_alignment = G.Graphics.Text.VERTICAL_ALIGNMENT_MIDDLE
-    t.scale_behavior = G.Graphics.Text.SCALE_BEHAVIOR_NONE
+    t.scale_behavior = (G.Graphics.Text.SCALE_BEHAVIOR_SCALE_FONT_DOWN if shrink
+                        else G.Graphics.Text.SCALE_BEHAVIOR_NONE)
     at = t.attributes
-    at.font.name = font; at.font.size = float(pt)
+    at.font.name = font; at.font.size = float(pt); at.font.bold = bold
     at.font.family = ("Bebas Neue" if font.startswith("Bebas") else "Helvetica")
     at.text_solid_fill.red = rgb[0] / 255.0; at.text_solid_fill.green = rgb[1] / 255.0
     at.text_solid_fill.blue = rgb[2] / 255.0; at.text_solid_fill.alpha = 1.0
@@ -448,8 +450,9 @@ def build(items, title, out_path, bg_ref, bg_nat, title_ref, title_nat,
         if entry[0] == "main":
             txt = entry[1]
             txt_el = text_element("", txt.replace(" / ", "\n").upper(),
-                                  POINT_BOX, PT_POINT, "BebasNeue",
-                                  False, align, 2, body, shadow)
+                                  POINT_BOX, PT_POINT, "Helvetica",
+                                  True, align, 2, body, shadow,
+                                  bold=True, shrink=True)
             add_slide([txt_el, bg_media_element(bg_ref, bg_nat)], "Point")
         else:
             _, ref, verse = entry
@@ -458,7 +461,8 @@ def build(items, title, out_path, bg_ref, bg_nat, title_ref, title_nat,
                 last = (j == len(pieces) - 1)
                 vbox = VERSE_BOX if (last and ref) else VERSE_MID
                 els = [text_element("Verse", piece, vbox, PT_VERSE,
-                                    "Helvetica", True, align, 3, body, shadow)]
+                                    "Helvetica", True, align, 3, body, shadow,
+                                    shrink=True)]
                 # Divider + reference ONLY on the final slide of the passage.
                 if last and ref:
                     els.append(divider_element(accent, divider_pos(align)))
