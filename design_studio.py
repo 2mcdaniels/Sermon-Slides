@@ -16,7 +16,7 @@ import os, math, random, colorsys
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops, ImageOps
 
 W, H = 1920, 1080
-SS = 2                                   # supersample for crisp edges
+SS = int(os.environ.get("DS_SS", "2"))   # supersample; set DS_SS=1 on low-RAM servers
 MARGIN = 130                             # base text-safe margin (title-safe 16:9)
 
 GF = "/usr/share/fonts/truetype/google-fonts"
@@ -730,6 +730,29 @@ def scripture_on_image(blank_im, a, verse, ref, align="left"):
         d.rectangle([dx, endy+34*SS, dx+90*SS, endy+40*SS], fill=a["accent"])
         _draw_tracked(d, ref.upper(), rf, rx, endy+58*SS, a["accent"], 6*SS)
     return _finish(img)
+
+def deck_from_uploads_iter(title_path, blank_path, entries, align="left"):
+    """Memory-safe: yield one finished (label, image) at a time so a low-RAM
+    server never holds the whole deck in memory."""
+    yield ("Title", _cover(Image.open(title_path)))
+    blank_im = _cover(Image.open(blank_path))
+    a = analyze_image(blank_path)
+    at = analyze_image(title_path)
+    def _sat(rgb):
+        import colorsys; h, s, v = colorsys.rgb_to_hsv(*[x/255 for x in rgb]); return s*v
+    if _sat(at["accent"]) > _sat(a["accent"]) + 0.08:
+        a["accent"] = at["accent"]
+    for e in entries:
+        if e[0] == "main":
+            yield ("Point", point_on_image(blank_im, a, e[1]))
+        else:
+            _, ref, verse = e
+            pieces = _split_passage(verse, 200)
+            for j, piece in enumerate(pieces):
+                last = (j == len(pieces) - 1)
+                yield (ref if (last and ref) else "Scripture",
+                       scripture_on_image(blank_im, a, piece, ref if last else "", align))
+
 
 def deck_from_uploads(title_path, blank_path, entries, align="left"):
     """Best-for-pastors path: use their uploaded TITLE as slide 1, and build
