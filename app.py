@@ -171,18 +171,41 @@ def generate():
             return render_template_string(PAGE, error="Couldn't build slides. " + " ".join(msg)), 500
         readme = (
             "HOW TO USE THESE SLIDES\n=======================\n\n"
-            "1. Move the 'ProPresenter Media' folder into your Mac's Documents folder:\n"
-            f"      ~/Documents/{rel}/background.png\n      ~/Documents/{rel}/title.png\n\n"
-            "2. In ProPresenter 7, delete any previous copy of this presentation.\n\n"
-            f"3. Import '{title}.pro'.\n\n"
+            "EASIEST WAY:\n"
+            "  1. Double-click 'Install images (double-click).command'. It places the\n"
+            "     background and title images where ProPresenter needs them.\n"
+            "     (If macOS blocks it, right-click the file -> Open -> Open.)\n"
+            "  2. In ProPresenter 7, delete any previous copy of this presentation,\n"
+            f"     then import '{title}.pro'.\n\n"
+            "MANUAL WAY (if you prefer):\n"
+            "  1. Move the 'ProPresenter Media' folder into your Mac's Documents folder:\n"
+            f"       ~/Documents/{rel}/background.png\n       ~/Documents/{rel}/title.png\n"
+            f"  2. Delete any old copy in ProPresenter, then import '{title}.pro'.\n\n"
             "Needs BebasNeue and Helvetica fonts installed. If ProPresenter asks to\n"
             "locate media, point it at the two images in the ProPresenter Media folder.\n")
+        installer = (
+            "#!/bin/bash\n"
+            "cd \"$(dirname \"$0\")\"\n"
+            "DEST=\"$HOME/Documents/ProPresenter Media\"\n"
+            "echo \"Installing sermon background images...\"\n"
+            "mkdir -p \"$DEST\"\n"
+            "cp -R \"ProPresenter Media/.\" \"$DEST/\"\n"
+            "echo \"\"\n"
+            "echo \"Done. Images are now in: $DEST\"\n"
+            "echo \"\"\n"
+            "echo \"Now open ProPresenter, delete any old copy of this presentation,\"\n"
+            "echo \"and import the .pro file that came in this folder.\"\n"
+            "echo \"\"\n"
+            "echo \"You can close this window.\"\n")
         mem = io.BytesIO()
         with zipfile.ZipFile(mem, "w", zipfile.ZIP_DEFLATED) as z:
             z.write(outpro, f"{title}.pro")
             z.write(bgp, f"{rel}/background.png")
             z.write(tip, f"{rel}/title.png")
             z.writestr("READ ME FIRST.txt", readme)
+            zi = zipfile.ZipInfo("Install images (double-click).command")
+            zi.external_attr = (0o755 << 16)   # make it executable/double-clickable
+            z.writestr(zi, installer)
         mem.seek(0)
         resp = send_file(mem, mimetype="application/zip", as_attachment=True,
                          download_name=f"{title} - ProPresenter.zip")
